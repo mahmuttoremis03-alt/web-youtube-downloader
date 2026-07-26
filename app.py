@@ -55,13 +55,15 @@ def index():
     if request.method == 'POST':
         url = request.form.get('url')
         try:
-            ydl_opts = {'quiet': True}
+            ydl_opts = {
+                'quiet': True,
+                'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+            }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 title = info.get('title', 'Video')
-                # Sadece ses/video formatlarını filtreleyelim
                 formats = [{'format_id': f['format_id'], 'format_note': f.get('format_note', 'Standard'), 'ext': f['ext']} 
-                           for f in info.get('formats', []) if f.get('vcodec') != 'none' or f.get('acodec') != 'none']
+                           for f in info.get('formats', []) if f.get('vcodec') != 'none' or f.get('acodec'] != 'none']
         except Exception as e:
             error = str(e)
             
@@ -78,6 +80,7 @@ def download():
     ydl_opts = {
         'format': format_id,
         'outtmpl': output_template,
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
     }
     
     try:
