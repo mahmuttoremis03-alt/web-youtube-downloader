@@ -17,7 +17,7 @@ HTML = """
 <div class="container py-5" style="max-width:720px">
 <h2 class="mb-4 text-center">Video İndirici</h2>
 <form method="post">
-<input class="form-control mb-3" name="url" placeholder="Video bağlantısı" value="{{ request.form.get('url', '') }}">
+<input class="form-control mb-3" name="url" placeholder="Video bağlantısı (YouTube, X, Facebook, Instagram, VK...)" value="{{ request.form.get('url', '') }}">
 <button class="btn btn-success w-100">Bilgileri Getir ve Önizle</button>
 </form>
 
@@ -32,7 +32,6 @@ HTML = """
 <p>Süre: {{ info.duration }} sn</p>
 <p>Kanal: {{ info.uploader }}</p>
 
-<!-- Video Önizleme Oynatıcısı -->
 {% if info.download_url %}
 <div class="ratio ratio-16x9 mb-3 bg-black rounded overflow-hidden">
 <video controls class="w-100 h-100">
@@ -40,9 +39,11 @@ HTML = """
 Tarayıcınız video etiketini desteklemiyor.
 </video>
 </div>
+<a href="/download?url={{ info.download_url }}&title={{ info.title }}" class="btn btn-primary w-100">Videoyu Cihaza İndir</a>
+{% else %}
+<div class="alert alert-warning">Bu video için doğrudan oynatılabilir akış bağlantısı bulunamadı.</div>
 {% endif %}
 
-<a href="/download?url={{ info.download_url }}&title={{ info.title }}" class="btn btn-primary w-100">Videoyu Cihaza İndir</a>
 </div>
 </div>
 {% endif %}
@@ -58,26 +59,45 @@ def home():
     if request.method=="POST":
         url=request.form.get("url","")
         opts={
-            "quiet":True,
-            "noplaylist":True,
-            "no_warnings":True,
+            "quiet": True,
+            "noplaylist": True,
+            "no_warnings": True,
+            # X (Twitter) gibi sitelerde format seçimini iyileştirmek için:
+            "format": "best[ext=mp4]/best",
         }
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 data = ydl.extract_info(url, download=False)
                 
-                download_url = data.get("url")
+                download_url = None
+                
+                # 1. Öncelik: Doğrudan URL alanı
+                if data.get("url") and not data.get("url").endswith(".m3u8"):
+                    download_url = data.get("url")
+                
+                # 2. Öncelik: Formats listesinden en iyi mp4 formatını seçme (X.com için kritik)
                 if not download_url and "formats" in data:
-                    formats = data.get("formats", [])
-                    for f in formats:
+                    for f in data.get("formats", []):
                         if f.get("url") and f.get("vcodec") != "none":
-                            download_url = f.get("url")
-                            break
+                            # MP4 uzantılı veya doğrudan progressive linkleri tercih et
+                            if f.get("ext") == "mp4":
+                                download_url = f.get("url")
+                                break
+                    # Eğer mp4 bulunamazsa çalışabilecek herhangi bir video formatı
+                    if not download_url:
+                        for f in data.get("formats", []):
+                            if f.get("url") and f.get("vcodec") != "none":
+                                download_url = f.get("url")
+                                break
+
+                # Eğer hala bulunamadıysa data.get("url") değerini son çare alalım
+                if not download_url:
+                    download_url = data.get("url")
 
                 info={
-                    "title": data.get("title") or "video",
+                    "title": data.get("title") or data.get("description") or "video",
                     "duration": data.get("duration"),
-                    "uploader": data.get("uploader"),
+                    "uploader": data.get("uploader") or data.get("uploader_id"),
                     "download_url": download_url
                 }
         except Exception as e:
@@ -89,15 +109,20 @@ def download_file():
     video_url = request.args.get("url")
     title = request.args.get("title", "video")
     safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
+    if not safe_title:
+        safe_title = "video"
     
     if not video_url:
         return "Geçersiz bağlantı", 400
 
     def generate():
-        r = requests.get(video_url, stream=True)
-        for chunk in r.iter_content(chunk_size=4096):
-            if chunk:
-                yield chunk
+        try:
+            r = requests.get(video_url, stream=True, headers={"User-Agent": "Mozilla/5.0"})
+            for chunk in r.iter_content(chunk_size=4096):
+                if chunk:
+                    yield chunk
+        except Exception:
+            pass
 
     headers = {
         "Content-Disposition": f"attachment; filename={safe_title}.mp4",
