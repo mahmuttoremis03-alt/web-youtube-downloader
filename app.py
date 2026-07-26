@@ -17,7 +17,7 @@ HTML = """
 <div class="container py-5" style="max-width:720px">
 <h2 class="mb-4 text-center">Video İndirici</h2>
 <form method="post">
-<input class="form-control mb-3" name="url" placeholder="Video bağlantısı (YouTube, X, Facebook, Instagram, VK...)" value="{{ request.form.get('url', '') }}">
+<input class="form-control mb-3" name="url" placeholder="Video bağlantısı" value="{{ request.form.get('url', '') }}">
 <button class="btn btn-success w-100">Bilgileri Getir ve Önizle</button>
 </form>
 
@@ -34,7 +34,7 @@ HTML = """
 
 {% if info.download_url %}
 <div class="ratio ratio-16x9 mb-3 bg-black rounded overflow-hidden">
-<video controls class="w-100 h-100">
+<video controls class="w-100 h-100" preload="metadata">
 <source src="{{ info.download_url }}" type="video/mp4">
 Tarayıcınız video etiketini desteklemiyor.
 </video>
@@ -62,8 +62,8 @@ def home():
             "quiet": True,
             "noplaylist": True,
             "no_warnings": True,
-            # X (Twitter) gibi sitelerde format seçimini iyileştirmek için:
-            "format": "best[ext=mp4]/best",
+            # X.com için en kararlı format seçimi
+            "format": "best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=mp4]/best",
         }
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -71,26 +71,16 @@ def home():
                 
                 download_url = None
                 
-                # 1. Öncelik: Doğrudan URL alanı
-                if data.get("url") and not data.get("url").endswith(".m3u8"):
-                    download_url = data.get("url")
-                
-                # 2. Öncelik: Formats listesinden en iyi mp4 formatını seçme (X.com için kritik)
-                if not download_url and "formats" in data:
-                    for f in data.get("formats", []):
-                        if f.get("url") and f.get("vcodec") != "none":
-                            # MP4 uzantılı veya doğrudan progressive linkleri tercih et
-                            if f.get("ext") == "mp4":
-                                download_url = f.get("url")
-                                break
-                    # Eğer mp4 bulunamazsa çalışabilecek herhangi bir video formatı
-                    if not download_url:
-                        for f in data.get("formats", []):
-                            if f.get("url") and f.get("vcodec") != "none":
-                                download_url = f.get("url")
-                                break
+                # Önce doğrudan formatlar arasında mp4 uzantılı ve video içeren bir link arayalım
+                formats = data.get("formats", [])
+                for f in formats:
+                    if f.get("ext") == "mp4" and f.get("url") and f.get("vcodec") != "none":
+                        download_url = f.get("url")
+                        # Eğer ses de içeriyorsa (X videoları genelde tek dosyadır) doğrudan bunu seçelim
+                        if f.get("acodec") != "none":
+                            break
 
-                # Eğer hala bulunamadıysa data.get("url") değerini son çare alalım
+                # Eğer formatlar arasında bulamadıysa genel url'ye bakalım
                 if not download_url:
                     download_url = data.get("url")
 
@@ -117,7 +107,7 @@ def download_file():
 
     def generate():
         try:
-            r = requests.get(video_url, stream=True, headers={"User-Agent": "Mozilla/5.0"})
+            r = requests.get(video_url, stream=True, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
             for chunk in r.iter_content(chunk_size=4096):
                 if chunk:
                     yield chunk
