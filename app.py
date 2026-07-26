@@ -18,7 +18,7 @@ HTML = """
 <h2 class="mb-4 text-center">Video İndirici</h2>
 <form method="post">
 <input class="form-control mb-3" name="url" placeholder="Video bağlantısı" value="{{ request.form.get('url', '') }}">
-<button class="btn btn-success w-100">Bilgileri Getir ve İndirmeye Hazırla</button>
+<button class="btn btn-success w-100">Bilgileri Getir ve Önizle</button>
 </form>
 
 {% if error %}
@@ -28,11 +28,21 @@ HTML = """
 {% if info %}
 <div class="card mt-4 bg-secondary text-light">
 <div class="card-body">
-<h4>{{ info.title }}</h4>
+<h4 class="mb-3">{{ info.title }}</h4>
 <p>Süre: {{ info.duration }} sn</p>
 <p>Kanal: {{ info.uploader }}</p>
-<!-- Doğrudan sunucu üzerinden indirmeyi tetikleyen rota -->
-<a href="/download?url={{ info.download_url }}&title={{ info.title }}" class="btn btn-primary w-100 mt-3">Videoyu Cihaza İndir</a>
+
+<!-- Video Önizleme Oynatıcısı -->
+{% if info.download_url %}
+<div class="ratio ratio-16x9 mb-3 bg-black rounded overflow-hidden">
+<video controls class="w-100 h-100">
+<source src="{{ info.download_url }}" type="video/mp4">
+Tarayıcınız video etiketini desteklemiyor.
+</video>
+</div>
+{% endif %}
+
+<a href="/download?url={{ info.download_url }}&title={{ info.title }}" class="btn btn-primary w-100">Videoyu Cihaza İndir</a>
 </div>
 </div>
 {% endif %}
@@ -78,14 +88,12 @@ def home():
 def download_file():
     video_url = request.args.get("url")
     title = request.args.get("title", "video")
-    # Dosya adındaki geçersiz karakterleri temizleyelim
     safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
     
     if not video_url:
         return "Geçersiz bağlantı", 400
 
     def generate():
-        # Uzaktaki video akışını parça parça okuyup kullanıcıya gönderiyoruz (Render RAM'ini yormaz)
         r = requests.get(video_url, stream=True)
         for chunk in r.iter_content(chunk_size=4096):
             if chunk:
