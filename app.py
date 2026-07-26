@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, request, redirect, send_file
+from flask import Flask, render_template_string, request, send_file
 import yt_dlp
 import os
 
@@ -57,13 +57,13 @@ def index():
         try:
             ydl_opts = {
                 'quiet': True,
-                'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+                'extractor_args': {'youtube': {'player_client': ['android']}}
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 title = info.get('title', 'Video')
                 formats = [{'format_id': f['format_id'], 'format_note': f.get('format_note', 'Standard'), 'ext': f['ext']} 
-                           for f in info.get('formats', []) if f.get('vcodec') != 'none' or f.get('acodec') != 'none']
+                           for f in info.get('formats', []) if f.get('vcodec') != 'none' or f.get('acodec'] != 'none']
         except Exception as e:
             error = str(e)
             
@@ -80,7 +80,7 @@ def download():
     ydl_opts = {
         'format': format_id,
         'outtmpl': output_template,
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+        'extractor_args': {'youtube': {'player_client': ['android']}}
     }
     
     try:
@@ -93,9 +93,3 @@ def download():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-    ydl_opts = {
-                'quiet': True,
-                'nocheckcertificate': True,
-                'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
-                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
