@@ -1,4 +1,6 @@
-from flask import Flask, render_template_string, request, redirect
+from flask import Flask, render_template_string, request, Response
+import yt_dlp
+import requests
 
 app = Flask(__name__)
 
@@ -29,7 +31,8 @@ HTML = """
 <h4>{{ info.title }}</h4>
 <p>Süre: {{ info.duration }} sn</p>
 <p>Kanal: {{ info.uploader }}</p>
-<a href="{{ info.download_url }}" class="btn btn-primary w-100 mt-3" target="_blank">Videoyu Cihaza İndir</a>
+<!-- Doğrudan sunucu üzerinden indirmeyi tetikleyen rota -->
+<a href="/download?url={{ info.download_url }}&title={{ info.title }}" class="btn btn-primary w-100 mt-3">Videoyu Cihaza İndir</a>
 </div>
 </div>
 {% endif %}
@@ -37,8 +40,6 @@ HTML = """
 </body>
 </html>
 """
-
-import yt_dlp
 
 @app.route("/", methods=["GET","POST"])
 def home():
@@ -55,10 +56,8 @@ def home():
             with yt_dlp.YoutubeDL(opts) as ydl:
                 data = ydl.extract_info(url, download=False)
                 
-                # Doğrudan oynatılabilir/indirilebilir medya adresini alıyoruz
                 download_url = data.get("url")
                 if not download_url and "formats" in data:
-                    # Alternatif olarak en iyi formatın URL'sini seç
                     formats = data.get("formats", [])
                     for f in formats:
                         if f.get("url") and f.get("vcodec") != "none":
@@ -66,7 +65,7 @@ def home():
                             break
 
                 info={
-                    "title": data.get("title"),
+                    "title": data.get("title") or "video",
                     "duration": data.get("duration"),
                     "uploader": data.get("uploader"),
                     "download_url": download_url
@@ -74,6 +73,29 @@ def home():
         except Exception as e:
             error=str(e)
     return render_template_string(HTML, info=info, error=error)
+
+@app.route("/download")
+def download_file():
+    video_url = request.args.get("url")
+    title = request.args.get("title", "video")
+    # Dosya adındaki geçersiz karakterleri temizleyelim
+    safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
+    
+    if not video_url:
+        return "Geçersiz bağlantı", 400
+
+    def generate():
+        # Uzaktaki video akışını parça parça okuyup kullanıcıya gönderiyoruz (Render RAM'ini yormaz)
+        r = requests.get(video_url, stream=True)
+        for chunk in r.iter_content(chunk_size=4096):
+            if chunk:
+                yield chunk
+
+    headers = {
+        "Content-Disposition": f"attachment; filename={safe_title}.mp4",
+        "Content-Type": "video/mp4"
+    }
+    return Response(generate(), headers=headers)
 
 if __name__=="__main__":
     app.run(host="0.0.0.0", port=5000)
