@@ -63,7 +63,7 @@ def index():
                 info = ydl.extract_info(url, download=False)
                 title = info.get('title', 'Video')
                 formats = [{'format_id': f['format_id'], 'format_note': f.get('format_note', 'Standard'), 'ext': f['ext']} 
-                           for f in info.get('formats', []) if f.get('vcodec') != 'none' or f.get('acodec'] != 'none']
+                           for f in info.get('formats', []) if f.get('vcodec') != 'none' or f.get('acodec') != 'none']
         except Exception as e:
             error = str(e)
             
